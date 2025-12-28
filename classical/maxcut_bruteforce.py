@@ -3,9 +3,11 @@ Brute-force Max-Cut solver for a 4-node graph.
 Finds the partition that maximizes the number of edges crossing the cut.
 """
 
-# Fixed edge list for 4 nodes
-edges = [(0, 1), (0, 2), (1, 3), (2, 3)]
-n = 4
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from common.graph import N_NODES, EDGES
 
 def count_cut_size(partition, edges):
     """
@@ -23,12 +25,12 @@ max_cut_value = 0
 best_partition = None
 
 # Iterate through all possible 0/1 assignments
-for i in range(2 ** n):
+for i in range(2 ** N_NODES):
     # Convert integer to binary tuple of length n
-    partition = tuple((i >> j) & 1 for j in range(n))
+    partition = tuple((i >> j) & 1 for j in range(N_NODES))
     
     # Calculate cut size for this partition
-    cut_size = count_cut_size(partition, edges)
+    cut_size = count_cut_size(partition, EDGES)
     
     # Update best solution if this is better
     if cut_size > max_cut_value:
