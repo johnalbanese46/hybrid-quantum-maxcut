@@ -6,6 +6,7 @@ This is a minimal implementation with p=1 (single layer) for demonstration.
 """
 
 import sys
+import argparse
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -70,43 +71,105 @@ def build_qaoa_circuit(gamma, beta, p=1):
     return circuit
 
 
-# Parameter sweep values
-gamma_values = [0.5, 1.0, 1.5]
-beta_values = [0.25, 0.5, 0.75]
-p = 1
+def run_sweep_mode():
+    """Run parameter sweep mode: test all combinations of gamma and beta values."""
+    # Parameter sweep values
+    gamma_values = [0.5, 1.0, 1.5]
+    beta_values = [0.25, 0.5, 0.75]
+    p = 1
+    
+    # Use local simulator
+    device = LocalSimulator()
+    
+    # Number of measurement shots
+    shots = 1000
+    
+    # Perform parameter sweep
+    for gamma in gamma_values:
+        for beta in beta_values:
+            # Build the QAOA circuit for this parameter pair
+            circuit = build_qaoa_circuit(gamma, beta, p)
+            
+            # Execute the circuit
+            task = device.run(circuit, shots=shots)
+            result = task.result()
+            
+            # Get measurement counts
+            measurement_counts = result.measurement_counts
+            
+            # Find most frequent bitstring
+            most_frequent = max(measurement_counts.items(), key=lambda x: x[1])
+            bitstring = most_frequent[0]
+            
+            # Convert bitstring to tuple of 0/1 for cut calculation
+            # Braket returns bitstrings as strings like "0011" or "0 0 1 1"
+            assignment = tuple(int(bit) for bit in bitstring.replace(" ", ""))
+            
+            # Compute cut value
+            cut_val = cut_size(assignment)
+            
+            # Print summary line
+            print(f"gamma={gamma}, beta={beta} -> best bitstring={bitstring}, cut={cut_val}")
 
-# Use local simulator
-device = LocalSimulator()
 
-# Number of measurement shots
-shots = 1000
-
-# Perform parameter sweep
-for gamma in gamma_values:
-    for beta in beta_values:
-        # Build the QAOA circuit for this parameter pair
-        circuit = build_qaoa_circuit(gamma, beta, p)
-        
-        # Execute the circuit
-        task = device.run(circuit, shots=shots)
-        result = task.result()
-        
-        # Get measurement counts
-        measurement_counts = result.measurement_counts
-        
-        # Find most frequent bitstring
-        most_frequent = max(measurement_counts.items(), key=lambda x: x[1])
-        bitstring = most_frequent[0]
-        
-        # Convert bitstring to tuple of 0/1 for cut calculation
-        # Braket returns bitstrings as strings like "0011" or "0 0 1 1"
+def run_single_mode():
+    """Run single-run mode: detailed analysis of one parameter pair."""
+    gamma = 1.0
+    beta = 0.5
+    p = 1
+    shots = 3000
+    
+    # Use local simulator
+    device = LocalSimulator()
+    
+    # Build and execute the circuit
+    circuit = build_qaoa_circuit(gamma, beta, p)
+    task = device.run(circuit, shots=shots)
+    result = task.result()
+    
+    # Get measurement counts
+    measurement_counts = result.measurement_counts
+    
+    # Convert bitstrings to assignments and compute cut values
+    bitstring_data = []
+    optimal_probability = 0.0
+    
+    for bitstring, count in measurement_counts.items():
+        # Convert bitstring to tuple of 0/1
         assignment = tuple(int(bit) for bit in bitstring.replace(" ", ""))
-        
-        # Compute cut value
         cut_val = cut_size(assignment)
+        probability = count / shots
         
-        # Print summary line
-        print(f"gamma={gamma}, beta={beta} -> best bitstring={bitstring}, cut={cut_val}")
+        bitstring_data.append((bitstring, count, cut_val, probability))
+        
+        # Accumulate probability for optimal cut=4 states
+        if cut_val == 4:
+            optimal_probability += probability
+    
+    # Sort by count (descending) and take top 8
+    bitstring_data.sort(key=lambda x: x[1], reverse=True)
+    top_8 = bitstring_data[:8]
+    
+    # Print top 8 bitstrings
+    print("Top 8 bitstrings (sorted by count):")
+    for bitstring, count, cut_val, prob in top_8:
+        print(f"  {bitstring}: count={count}, cut={cut_val}, prob={prob:.4f}")
+    
+    # Print total probability on optimal cut=4 states
+    print(f"\nTotal probability mass on optimal cut=4 states: {optimal_probability:.4f}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="QAOA simulator for Max-Cut")
+    parser.add_argument("--single", action="store_true", 
+                       help="Run single-run mode (gamma=1.0, beta=0.5, 3000 shots)")
+    
+    args = parser.parse_args()
+    
+    if args.single:
+        run_single_mode()
+    else:
+        run_sweep_mode()
 
 
 # Note on differences with real hardware:
